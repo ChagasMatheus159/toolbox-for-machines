@@ -1,0 +1,32 @@
+# SearXNG settings for Toolbox — JSON API only, no HTML UI needed.
+# Tuned for programmatic access by AI agents.
+
+use_default_settings: true
+
+general:
+  instance_name: "Toolbox Search"
+  debug: false
+  donation_url: false
+  contact_url: false
+
+server:
+  port: 8888
+  bind_address: "0.0.0.0"
+  secret_key: "toolbox-internal-secret"
+  limiter: false
+  image_proxy: false
+  public_instance: false
+  method: "GET"
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  formats:
+    - json
+  default_locale: "en"
+
+ui:
+  static_use_hash: false
+  default_locale: "en"
+  theme_args:
+    simple_style: "dark"

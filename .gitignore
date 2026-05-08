@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+
+# Docker
+docker-compose.override.yml
+
+# Cache
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# Models (too large for git)
+*.gguf
+*.bin
+models/
