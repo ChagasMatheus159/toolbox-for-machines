@@ -1,13 +1,11 @@
 FROM ghcr.io/ggerganov/whisper.cpp:main
 
-# Download the medium model
-RUN mkdir -p /models && \
-    /app/models/download-ggml-model.sh medium /models
+# Download the medium model (the script puts it in /app/models/)
+RUN bash /app/models/download-ggml-model.sh medium
 
 EXPOSE 8200
 
-CMD ["/app/server", \
-     "--model", "/models/ggml-medium.bin", \
+CMD ["/app/build/bin/whisper-server", \
+     "--model", "/app/models/ggml-medium.bin", \
      "--host", "0.0.0.0", \
-     "--port", "8200", \
-     "--print-realtime", "false"]
+     "--port", "8200"]

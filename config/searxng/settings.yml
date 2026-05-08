@@ -10,7 +10,7 @@ general:
   contact_url: false
 
 server:
-  port: 8888
+  port: 8080
   bind_address: "0.0.0.0"
   secret_key: "toolbox-internal-secret"
   limiter: false

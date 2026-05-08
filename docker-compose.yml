@@ -19,7 +19,7 @@ services:
       - "0.0.0.0:${TOOLBOX_PORT:-9600}:9600"
     environment:
       TOOLBOX_PORT: "9600"
-      SEARXNG_URL: http://searxng:8888
+      SEARXNG_URL: http://searxng:8080
       CAMOUFOX_URL: http://camoufox:8790
       WHISPER_URL: http://whisper:8200
       LLM_URL: ${LLM_URL:-http://192.168.3.118:8080/v1}
@@ -54,11 +54,11 @@ services:
     volumes:
       - ./config/searxng/settings.yml:/etc/searxng/settings.yml:ro
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8888/"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
   camoufox:
     <<: *common
@@ -86,11 +86,11 @@ services:
       dockerfile: Dockerfile
     container_name: toolbox-whisper
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8200/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8200/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      start_period: 30s
 
 volumes:
   cache-data:

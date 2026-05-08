@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     toolbox_port: int = 9600
 
     # Backend URLs
-    searxng_url: str = "http://searxng:8888"
+    searxng_url: str = "http://searxng:8080"
     camoufox_url: str = "http://camoufox:8790"
     whisper_url: str = "http://whisper:8200"
 
