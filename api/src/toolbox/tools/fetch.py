@@ -76,7 +76,44 @@ async def fetch(req: FetchRequest, request: Request):
         r.raise_for_status()
         data = r.json()
     except Exception as e:
-        log.error("Camoufox fetch failed for %s: %s", req.url, e)
+        log.warning("Camoufox fetch failed for %s: %s — trying lightweight fallback", req.url, e)
+        # Fallback: simple HTTP GET without JS rendering
+        try:
+            fallback_r = await http.get(
+                req.url,
+                timeout=15,
+                follow_redirects=True,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+            )
+            fallback_r.raise_for_status()
+            html = fallback_r.text
+            import re
+            title_search = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
+            title = title_search.group(1).strip() if title_search else ""
+            final_url = str(fallback_r.url)
+            content = extract_content(html, req.format)
+            if content and len(content) > 50:
+                log.info("Lightweight fallback succeeded for %s (%d words)", req.url, len(content.split()))
+                word_count = len(content.split())
+                response = FetchResponse(
+                    url=req.url,
+                    final_url=final_url,
+                    title=title,
+                    content=content,
+                    format=req.format,
+                    word_count=word_count,
+                )
+                if not req.screenshot:
+                    cache.set(cache_key, response.model_dump(), ttl_seconds=1800)
+                return response
+        except Exception as fallback_err:
+            log.debug("Lightweight fallback also failed for %s: %s", req.url, fallback_err)
+
+        # Both methods failed
         return FetchResponse(
             url=req.url,
             final_url=req.url,

@@ -12,6 +12,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Optional
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -26,7 +27,19 @@ logging.basicConfig(
 
 DEFAULT_LOCALE = os.environ.get("CAMOUFOX_LOCALE", "en-US")
 DEFAULT_TZ = os.environ.get("CAMOUFOX_TZ", "America/Sao_Paulo")
-FETCH_TIMEOUT_MS = int(os.environ.get("CAMOUFOX_TIMEOUT_MS", "30000"))
+FETCH_TIMEOUT_MS = int(os.environ.get("CAMOUFOX_TIMEOUT_MS", "20000"))
+
+# Domains to block (trackers/analytics that slow pages down)
+BLOCKED_DOMAINS = {
+    "google-analytics.com",
+    "googletagmanager.com",
+    "doubleclick.net",
+    "facebook.net",
+    "hotjar.com",
+    "segment.com",
+    "newrelic.com",
+    "nr-data.net",
+}
 
 
 class FetchRequest(BaseModel):
@@ -47,14 +60,15 @@ class FetchResponse(BaseModel):
 
 
 class BrowserPool:
-    """Single long-lived Camoufox browser; per-request new context."""
+    """Single long-lived Camoufox browser; serialized requests (Firefox limitation)."""
 
-    MAX_REQUESTS = int(os.environ.get("CAMOUFOX_MAX_REQUESTS", "500"))
+    MAX_REQUESTS = int(os.environ.get("CAMOUFOX_MAX_REQUESTS", "200"))
 
     def __init__(self) -> None:
         self._cam: AsyncCamoufox | None = None
         self._browser = None
         self._lock = asyncio.Lock()
+        self._semaphore = asyncio.Semaphore(1)  # Firefox/Camoufox: one context at a time
         self._request_count = 0
 
     async def start(self) -> None:
@@ -66,6 +80,7 @@ class BrowserPool:
                 headless=True,
                 humanize=True,
                 locale=DEFAULT_LOCALE,
+                block_images=True,
             )
             self._browser = await self._cam.__aenter__()
             self._request_count = 0
@@ -88,18 +103,36 @@ class BrowserPool:
             await self.stop()
             await self.start()
 
-    async def fetch(self, req: FetchRequest) -> FetchResponse:
-        if self._browser is None:
-            await self.start()
-        await self._recycle_if_needed()
-        self._request_count += 1
-
+    async def _do_fetch(self, req: FetchRequest) -> FetchResponse:
+        """Internal fetch logic — runs inside semaphore + timeout guard."""
         ctx = await self._browser.new_context(
             locale=DEFAULT_LOCALE,
             timezone_id=DEFAULT_TZ,
         )
         try:
             page = await ctx.new_page()
+
+            # Block trackers/heavy resources via route
+            async def block_resources(route):
+                request = route.request
+                resource_type = request.resource_type
+                # Block fonts and media (images already blocked at browser level)
+                if resource_type in ("font", "media"):
+                    await route.abort()
+                    return
+                # Block known tracker domains
+                try:
+                    host = urlparse(request.url).hostname or ""
+                    for domain in BLOCKED_DOMAINS:
+                        if host == domain or host.endswith(f".{domain}"):
+                            await route.abort()
+                            return
+                except Exception:
+                    pass
+                await route.continue_()
+
+            await page.route("**/*", block_resources)
+
             try:
                 resp = await page.goto(
                     req.url, wait_until="domcontentloaded", timeout=FETCH_TIMEOUT_MS
@@ -111,7 +144,9 @@ class BrowserPool:
 
             if req.wait_for:
                 try:
-                    await page.wait_for_selector(req.wait_for, timeout=FETCH_TIMEOUT_MS)
+                    await page.wait_for_selector(
+                        req.wait_for, timeout=min(FETCH_TIMEOUT_MS, 10000)
+                    )
                 except Exception:
                     pass
 
@@ -121,7 +156,9 @@ class BrowserPool:
             title = await page.title()
             html = await page.content()
             try:
-                text = await page.evaluate("() => document.body ? document.body.innerText : ''")
+                text = await page.evaluate(
+                    "() => document.body ? document.body.innerText : ''"
+                )
             except Exception:
                 text = ""
 
@@ -140,7 +177,35 @@ class BrowserPool:
                 final_url=page.url,
             )
         finally:
-            await ctx.close()
+            try:
+                await asyncio.wait_for(ctx.close(), timeout=5)
+            except (asyncio.TimeoutError, Exception) as e:
+                log.warning(
+                    "context close failed (%s), scheduling browser recycle", e
+                )
+                self._request_count = self.MAX_REQUESTS
+
+    async def fetch(self, req: FetchRequest) -> FetchResponse:
+        """Fetch with serialized access and hard timeout."""
+        if self._browser is None:
+            await self.start()
+        await self._recycle_if_needed()
+        self._request_count += 1
+
+        async with self._semaphore:
+            # Hard timeout: browser timeout + 5s buffer
+            hard_timeout = (FETCH_TIMEOUT_MS / 1000) + 5
+            try:
+                return await asyncio.wait_for(
+                    self._do_fetch(req), timeout=hard_timeout
+                )
+            except asyncio.TimeoutError:
+                log.error("hard timeout reached for %s", req.url)
+                # Force recycle — browser is likely stuck
+                self._request_count = self.MAX_REQUESTS
+                raise HTTPException(
+                    status_code=504, detail=f"fetch timeout for {req.url}"
+                )
 
 
 pool = BrowserPool()

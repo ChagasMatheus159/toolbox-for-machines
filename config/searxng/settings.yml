@@ -25,6 +25,33 @@ search:
     - json
   default_locale: "en"
 
+outgoing:
+  request_timeout: 8.0
+  max_request_timeout: 15.0
+
+# Disable unreliable/slow engines that cause IT category timeouts
+engines:
+  - name: stackoverflow
+    disabled: false
+    timeout: 12.0
+  - name: github
+    disabled: false
+    timeout: 12.0
+  - name: gitlab
+    disabled: true
+  - name: codeberg
+    disabled: true
+  - name: searchcode code
+    disabled: true
+  - name: npm
+    disabled: true
+  - name: packagist
+    disabled: true
+  - name: hoogle
+    disabled: true
+  - name: crates.io
+    disabled: true
+
 ui:
   static_use_hash: false
   default_locale: "en"

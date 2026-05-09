@@ -66,12 +66,15 @@ services:
       context: ./camoufox
       dockerfile: Dockerfile
     container_name: toolbox-camoufox
-    mem_limit: 1536m
-    memswap_limit: 1536m
+    mem_limit: 2048m
+    memswap_limit: 2048m
     environment:
       CAMOUFOX_LOCALE: en-US
       CAMOUFOX_TZ: America/Sao_Paulo
-      CAMOUFOX_TIMEOUT_MS: "30000"
+      CAMOUFOX_TIMEOUT_MS: "20000"
+      CAMOUFOX_MAX_REQUESTS: "200"
+    volumes:
+      - camoufox-cache:/root/.camoufox
     healthcheck:
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8790/healthz', timeout=5)\""]
       interval: 60s
@@ -94,3 +97,4 @@ services:
 
 volumes:
   cache-data:
+  camoufox-cache:

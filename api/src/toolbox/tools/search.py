@@ -11,6 +11,11 @@ from toolbox.config import settings
 log = logging.getLogger("toolbox.search")
 router = APIRouter()
 
+# Categories that use slower engines and need more time
+SLOW_CATEGORIES = {"it", "science", "files", "social media"}
+SLOW_TIMEOUT = 20  # seconds
+DEFAULT_TIMEOUT = 10  # seconds
+
 
 class SearchRequest(BaseModel):
     query: str
@@ -48,13 +53,28 @@ async def search(req: SearchRequest, request: Request):
         "categories": req.categories,
     }
 
+    # Use longer timeout for slow engine categories
+    timeout = SLOW_TIMEOUT if req.categories.lower() in SLOW_CATEGORIES else DEFAULT_TIMEOUT
+
     try:
-        r = await http.get(f"{settings.searxng_url}/search", params=params, timeout=10)
+        r = await http.get(f"{settings.searxng_url}/search", params=params, timeout=timeout)
         r.raise_for_status()
         data = r.json()
     except Exception as e:
-        log.error("SearXNG request failed: %s", e)
-        return SearchResponse(results=[], query=req.query, count=0)
+        log.error("SearXNG request failed (category=%s, timeout=%ds): %s", req.categories, timeout, e)
+        # For slow categories, retry with "general" as fallback
+        if req.categories.lower() in SLOW_CATEGORIES:
+            log.info("Retrying with 'general' category as fallback for query: %s", req.query)
+            params["categories"] = "general"
+            try:
+                r = await http.get(f"{settings.searxng_url}/search", params=params, timeout=DEFAULT_TIMEOUT)
+                r.raise_for_status()
+                data = r.json()
+            except Exception as e2:
+                log.error("SearXNG fallback also failed: %s", e2)
+                return SearchResponse(results=[], query=req.query, count=0)
+        else:
+            return SearchResponse(results=[], query=req.query, count=0)
 
     # Parse results
     raw_results = data.get("results", [])[:req.limit]

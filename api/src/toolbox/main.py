@@ -12,7 +12,15 @@ from toolbox.config import settings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage shared HTTP client lifecycle."""
-    app.state.http = httpx.AsyncClient(timeout=settings.fetch_timeout_seconds)
+    app.state.http = httpx.AsyncClient(
+        timeout=settings.fetch_timeout_seconds,
+        follow_redirects=True,
+        headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+    )
     try:
         yield
     finally:
