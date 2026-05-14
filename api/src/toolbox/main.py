@@ -1,5 +1,6 @@
 """FastAPI application — main entry point for the Toolbox service."""
 
+import asyncio
 from contextlib import asynccontextmanager
 
 import httpx
@@ -48,39 +49,43 @@ app.add_middleware(
 @app.get("/healthz")
 async def healthz():
     """Liveness check for the API itself."""
-    backends = {}
+    http = app.state.http
 
-    # Check SearXNG
-    try:
-        r = await app.state.http.get(f"{settings.searxng_url}/", timeout=3)
-        backends["searxng"] = "healthy" if r.status_code == 200 else "unhealthy"
-    except Exception:
-        backends["searxng"] = "unreachable"
+    async def check_searxng():
+        try:
+            r = await http.get(f"{settings.searxng_url}/", timeout=3)
+            return "healthy" if r.status_code == 200 else "unhealthy"
+        except Exception:
+            return "unreachable"
 
-    # Check Camoufox
-    try:
-        r = await app.state.http.get(f"{settings.camoufox_url}/healthz", timeout=5)
-        backends["camoufox"] = "healthy" if r.status_code == 200 else "unhealthy"
-    except Exception:
-        backends["camoufox"] = "unreachable"
+    async def check_camoufox():
+        try:
+            r = await http.get(f"{settings.camoufox_url}/healthz", timeout=5)
+            return "healthy" if r.status_code == 200 else "unhealthy"
+        except Exception:
+            return "unreachable"
 
-    # Check Whisper
-    try:
-        r = await app.state.http.get(f"{settings.whisper_url}/health", timeout=3)
-        backends["whisper"] = "healthy" if r.status_code == 200 else "unhealthy"
-    except Exception:
-        backends["whisper"] = "unreachable"
+    async def check_whisper():
+        try:
+            r = await http.get(f"{settings.whisper_url}/health", timeout=3)
+            return "healthy" if r.status_code == 200 else "unhealthy"
+        except Exception:
+            return "unreachable"
 
-    # Check LLM
-    try:
-        headers = {}
-        if settings.llm_api_key:
-            headers["Authorization"] = f"Bearer {settings.llm_api_key}"
-        r = await app.state.http.get(f"{settings.llm_url}/models", headers=headers, timeout=5)
-        backends["llm"] = "healthy" if r.status_code == 200 else "unhealthy"
-    except Exception:
-        backends["llm"] = "unreachable"
+    async def check_llm():
+        try:
+            headers = {}
+            if settings.llm_api_key:
+                headers["Authorization"] = f"Bearer {settings.llm_api_key}"
+            r = await http.get(f"{settings.llm_url}/models", headers=headers, timeout=5)
+            return "healthy" if r.status_code == 200 else "unhealthy"
+        except Exception:
+            return "unreachable"
 
+    results = await asyncio.gather(
+        check_searxng(), check_camoufox(), check_whisper(), check_llm()
+    )
+    backends = dict(zip(["searxng", "camoufox", "whisper", "llm"], results))
     status = "ok" if all(v == "healthy" for v in backends.values()) else "degraded"
     return {"status": status, "backends": backends}
 

@@ -11,8 +11,7 @@ from toolbox.config import settings
 log = logging.getLogger("toolbox.search")
 router = APIRouter()
 
-# Categories that use slower engines and need more time
-SLOW_CATEGORIES = {"it", "science", "files", "social media"}
+SLOW_CATEGORIES = {"it", "science"}
 SLOW_TIMEOUT = 20  # seconds
 DEFAULT_TIMEOUT = 10  # seconds
 
@@ -20,7 +19,7 @@ DEFAULT_TIMEOUT = 10  # seconds
 class SearchRequest(BaseModel):
     query: str
     limit: int = Field(default=10, ge=1, le=50)
-    categories: str = "general"
+    categories: str = Field(default="general", pattern="^(general|news|images|science|it)$")
 
 
 class SearchResult(BaseModel):
@@ -90,7 +89,8 @@ async def search(req: SearchRequest, request: Request):
 
     response = SearchResponse(results=results, query=req.query, count=len(results))
 
-    # Cache for 5 minutes
-    cache.set(cache_key, response.model_dump(), ttl_seconds=300)
+    # Cache for 5 minutes — only if we got results (transient failures should not be cached)
+    if len(results) > 0:
+        cache.set(cache_key, response.model_dump(), ttl_seconds=300)
 
     return response

@@ -1,5 +1,6 @@
 """POST /v1/summarize — Text summarization via LLM."""
 
+import hashlib
 import logging
 
 from fastapi import APIRouter, HTTPException
@@ -30,7 +31,8 @@ async def summarize(req: SummarizeRequest):
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
 
     # Check cache
-    cache_key = cache.make_key("summarize", {"text_hash": hash(req.text), "max_tokens": req.max_tokens, "style": req.style})
+    text_hash = hashlib.sha256(req.text.encode()).hexdigest()
+    cache_key = cache.make_key("summarize", {"text_hash": text_hash, "max_tokens": req.max_tokens, "style": req.style})
     cached = cache.get(cache_key)
     if cached:
         return cached
@@ -49,7 +51,7 @@ async def summarize(req: SummarizeRequest):
     elif req.style == "detailed":
         style_hint = " Include supporting details."
 
-    system_prompt = SUMMARIZE.format(max_tokens=req.max_tokens) + style_hint
+    system_prompt = SUMMARIZE.format(words=req.max_tokens * 3 // 4) + style_hint
 
     messages = [
         {"role": "system", "content": system_prompt},

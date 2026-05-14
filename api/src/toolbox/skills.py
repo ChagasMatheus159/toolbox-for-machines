@@ -64,20 +64,23 @@ SKILLS = {
         {
             "id": "describe",
             "endpoint": "POST /v1/describe",
-            "description": "Describe an image or screenshot using vision model. Returns a text description.",
+            "description": "Describe an image, screenshot, or webpage using vision model. Accepts image_url, image_b64, or page_url (screenshots the page first).",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "image_url": {"type": "string", "description": "URL of the image to describe"},
                     "image_b64": {"type": "string", "description": "Base64-encoded image data"},
+                    "page_url": {"type": "string", "description": "URL of a webpage to screenshot and describe"},
                     "prompt": {"type": "string", "default": "Describe this image concisely.", "description": "Custom prompt for the vision model"},
+                    "wait_for": {"type": "string", "description": "CSS selector to wait for before screenshotting (page_url only)"},
+                    "wait_ms": {"type": "integer", "default": 0, "maximum": 20000, "description": "Milliseconds to wait after page load before screenshotting (page_url only)"},
                 },
             },
             "output_schema": {
                 "type": "object",
                 "properties": {"description": {"type": "string"}},
             },
-            "when_to_use": "When you need to understand what's in an image, screenshot, diagram, or photo.",
+            "when_to_use": "When you need to understand what's in an image, screenshot, diagram, or photo. Use page_url to screenshot and describe a webpage in one call.",
             "when_not_to_use": "When you already have the text content (use summarize instead).",
         },
         {
@@ -137,9 +140,9 @@ SKILLS = {
             },
             "output_schema": {
                 "type": "object",
-                "properties": {"data": {"type": "object"}},
+                "properties": {"data": {"description": "Extracted data matching the provided schema (object or array)"}},
             },
-            "when_to_use": "When you need specific structured fields from unstructured text (job listings, articles, profiles, etc.).",
+            "when_to_use": "When you need specific structured fields from unstructured text (job listings, articles, profiles, etc.). Supports both object and array root schemas.",
             "when_not_to_use": "When you need a general summary (use summarize). When the data is already structured.",
         },
     ],

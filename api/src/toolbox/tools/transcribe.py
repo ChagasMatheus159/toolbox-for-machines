@@ -2,13 +2,13 @@
 
 import base64
 import logging
-import tempfile
 from typing import Optional
 
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel
 
 from toolbox.config import settings
+from toolbox.validation import validate_url
 
 log = logging.getLogger("toolbox.transcribe")
 router = APIRouter()
@@ -32,22 +32,35 @@ async def transcribe(req: TranscribeRequest, request: Request):
     if not req.audio_url and not req.audio_b64:
         raise HTTPException(status_code=400, detail="Either audio_url or audio_b64 is required.")
 
+    if req.audio_url:
+        await validate_url(req.audio_url)
+
     http = request.app.state.http
+
+    MAX_AUDIO_BYTES = 100 * 1024 * 1024  # 100MB
 
     # Get audio bytes
     if req.audio_url:
         try:
             r = await http.get(req.audio_url, timeout=30)
             r.raise_for_status()
+            # Check Content-Length header before reading body
+            cl_header = r.headers.get("content-length")
+            if cl_header and int(cl_header) > MAX_AUDIO_BYTES:
+                raise HTTPException(status_code=400, detail="Audio too large (max 100MB).")
             audio_bytes = r.content
+            if len(audio_bytes) > MAX_AUDIO_BYTES:
+                raise HTTPException(status_code=400, detail="Audio too large (max 100MB).")
+        except HTTPException:
+            raise
         except Exception as e:
             log.error("Failed to download audio %s: %s", req.audio_url, e)
-            raise HTTPException(status_code=502, detail=f"Failed to download audio: {e}")
+            raise HTTPException(status_code=502, detail="Failed to download audio.")
     else:
         try:
             audio_bytes = base64.b64decode(req.audio_b64)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid base64 audio: {e}")
+            raise HTTPException(status_code=400, detail="Invalid base64 audio data.")
 
     # Send to whisper.cpp server
     try:

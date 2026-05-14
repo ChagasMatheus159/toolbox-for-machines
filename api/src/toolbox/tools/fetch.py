@@ -1,6 +1,7 @@
 """POST /v1/fetch — Stealth web fetch via Camoufox + content extraction."""
 
 import logging
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Request
@@ -8,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from toolbox.cache import cache
 from toolbox.config import settings
+from toolbox.validation import validate_url
 
 log = logging.getLogger("toolbox.fetch")
 router = APIRouter()
@@ -32,7 +34,7 @@ class FetchResponse(BaseModel):
 
 
 def extract_content(html: str, output_format: str) -> str:
-    """Extract main content from HTML using trafilatura (fallback for Crawl4AI)."""
+    """Extract main content from HTML using trafilatura."""
     try:
         import trafilatura
 
@@ -51,9 +53,16 @@ def extract_content(html: str, output_format: str) -> str:
 @router.post("/fetch", response_model=FetchResponse)
 async def fetch(req: FetchRequest, request: Request):
     """Fetch a URL via stealth browser, return clean extracted content."""
+    await validate_url(req.url)
+
     # Check cache (skip if screenshot requested)
     if not req.screenshot:
-        cache_key = cache.make_key("fetch", {"url": req.url, "format": req.format})
+        cache_key = cache.make_key("fetch", {
+            "url": req.url,
+            "format": req.format,
+            "wait_for": req.wait_for,
+            "wait_ms": req.wait_ms,
+        })
         cached = cache.get(cache_key)
         if cached:
             return cached
@@ -91,7 +100,6 @@ async def fetch(req: FetchRequest, request: Request):
             )
             fallback_r.raise_for_status()
             html = fallback_r.text
-            import re
             title_search = re.search(r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL)
             title = title_search.group(1).strip() if title_search else ""
             final_url = str(fallback_r.url)
@@ -118,7 +126,7 @@ async def fetch(req: FetchRequest, request: Request):
             url=req.url,
             final_url=req.url,
             title="",
-            content=f"Error fetching URL: {e}",
+            content="Error: unable to fetch this URL.",
             format=req.format,
             word_count=0,
         )
@@ -129,15 +137,7 @@ async def fetch(req: FetchRequest, request: Request):
     final_url = data.get("final_url", req.url)
     screenshot_b64 = data.get("screenshot_b64")
 
-    # Try Crawl4AI first, fall back to trafilatura
-    content = ""
-    try:
-        from crawl4ai import extract_content as crawl4ai_extract
-
-        content = crawl4ai_extract(html, output_format=req.format)
-    except (ImportError, Exception) as e:
-        log.debug("Crawl4AI not available or failed, using trafilatura: %s", e)
-        content = extract_content(html, req.format)
+    content = extract_content(html, req.format)
 
     # If extraction failed, use the plain text from Camoufox
     if not content:

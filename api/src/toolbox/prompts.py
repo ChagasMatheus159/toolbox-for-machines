@@ -11,7 +11,7 @@ DESCRIBE = (
 )
 
 SUMMARIZE = (
-    "You are a summarizer. Condense the following text to {max_tokens} tokens maximum. "
+    "You are a summarizer. Condense the following text to approximately {words} words. "
     "Preserve key facts, names, numbers, and conclusions. "
     "Return the summary only. No preamble, no labels."
 )
