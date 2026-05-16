@@ -4,7 +4,7 @@ import base64
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 
 from toolbox.config import settings
@@ -44,7 +44,6 @@ async def transcribe(req: TranscribeRequest, request: Request):
         try:
             r = await http.get(req.audio_url, timeout=30)
             r.raise_for_status()
-            # Check Content-Length header before reading body
             cl_header = r.headers.get("content-length")
             if cl_header and int(cl_header) > MAX_AUDIO_BYTES:
                 raise HTTPException(status_code=400, detail="Audio too large (max 100MB).")
@@ -64,7 +63,6 @@ async def transcribe(req: TranscribeRequest, request: Request):
 
     # Send to whisper.cpp server
     try:
-        # whisper.cpp server expects multipart form with file
         files = {"file": ("audio.wav", audio_bytes, req.mime_type)}
         data = {"language": req.language, "response_format": "json"}
 
@@ -72,7 +70,7 @@ async def transcribe(req: TranscribeRequest, request: Request):
             f"{settings.whisper_url}/inference",
             files=files,
             data=data,
-            timeout=120,  # Audio can take a while
+            timeout=120,
         )
         r.raise_for_status()
         result = r.json()
@@ -80,7 +78,39 @@ async def transcribe(req: TranscribeRequest, request: Request):
         log.error("Whisper request failed: %s", e)
         raise HTTPException(status_code=502, detail=f"Whisper transcription error: {e}")
 
-    # Parse response (whisper.cpp returns {"text": "..."})
     transcript = result.get("text", "").strip()
 
     return TranscribeResponse(transcript=transcript, language=req.language)
+
+
+@router.post("/audio/transcriptions")
+async def transcribe_openai(
+    request: Request,
+    file: UploadFile = File(...),
+    language: str = Form("en"),
+    model: Optional[str] = Form(None),
+):
+    """OpenAI-compatible audio transcription endpoint."""
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="file field is required.")
+
+    mime_type = file.content_type or "audio/wav"
+
+    try:
+        files = {"file": (file.filename or "audio.wav", audio_bytes, mime_type)}
+        data = {"language": language, "response_format": "json"}
+
+        r = await request.app.state.http.post(
+            f"{settings.whisper_url}/inference",
+            files=files,
+            data=data,
+            timeout=120,
+        )
+        r.raise_for_status()
+        result = r.json()
+    except Exception as e:
+        log.error("Whisper request failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"Whisper transcription error: {e}")
+
+    return {"text": result.get("text", "").strip()}
