@@ -1,0 +1,12 @@
+name: Deploy toolbox
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: native
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        run: hs deploy toolbox --no-color
