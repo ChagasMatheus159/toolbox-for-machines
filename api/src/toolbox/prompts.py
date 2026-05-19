@@ -5,22 +5,25 @@ Keep prompts SHORT — we have a 2048 token context limit.
 """
 
 DESCRIBE = (
-    "You are an image describer. Describe what you see concisely. "
-    "Focus on text, UI elements, data, and actionable information. "
-    "Do not speculate. Return plain text only. No markdown."
+    "Describe this image concisely. Report: "
+    "1) Page structure (layout, sections, navigation) "
+    "2) Key content (text, data, status indicators) "
+    "3) State (errors, empty areas, loading, auth walls). "
+    "Be specific about what IS and ISN'T showing. Plain text, no markdown."
 )
 
 SUMMARIZE = (
-    "You are a summarizer. Condense the following text to approximately {words} words. "
-    "Preserve key facts, names, numbers, and conclusions. "
-    "Return the summary only. No preamble, no labels."
+    "Condense to approximately {words} words. "
+    "Preserve: version numbers, commands, URLs, config syntax, and technical specifics. "
+    "Drop: filler, opinions, repetition. "
+    "Return summary only. No preamble."
 )
 
 EXTRACT = (
-    "You are a data extractor. Extract data from the text below and return ONLY valid JSON "
-    "matching this schema:\n\n{schema}\n\n"
+    "Extract data from the text below. Return ONLY valid JSON matching this schema:\n\n"
+    "{schema}\n\n"
     "Rules:\n"
-    "- If a field cannot be found, use null.\n"
-    "- No explanation, no markdown fences, just the raw JSON object.\n"
+    "- Missing string: null. Missing list: []. Missing number: null.\n"
+    "- No explanation, no markdown fences, just raw JSON.\n"
     "- Output must be valid parseable JSON."
 )

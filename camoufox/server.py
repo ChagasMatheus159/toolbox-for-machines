@@ -80,7 +80,8 @@ class BrowserPool:
                 headless=True,
                 humanize=True,
                 locale=DEFAULT_LOCALE,
-                block_images=True,
+                os="windows",
+                block_webrtc=True,
             )
             self._browser = await self._cam.__aenter__()
             self._request_count = 0
@@ -116,8 +117,12 @@ class BrowserPool:
             async def block_resources(route):
                 request = route.request
                 resource_type = request.resource_type
-                # Block fonts and media (images already blocked at browser level)
+                # Block fonts and media always
                 if resource_type in ("font", "media"):
+                    await route.abort()
+                    return
+                # Block images by default; allow when screenshot requested
+                if resource_type == "image" and not req.screenshot:
                     await route.abort()
                     return
                 # Block known tracker domains
