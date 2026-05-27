@@ -17,6 +17,7 @@ class Cache:
         self.db_path = db_path or settings.cache_db_path
         if self.enabled:
             self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("""
                 CREATE TABLE IF NOT EXISTS cache (
                     key TEXT PRIMARY KEY,
