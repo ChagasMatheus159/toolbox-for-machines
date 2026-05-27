@@ -3,29 +3,23 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from toolbox.config import settings
+from toolbox.http_client import get_http_client, close_http_client
+from toolbox.mcp_server import mcp as mcp_server
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Manage shared HTTP client lifecycle."""
-    app.state.http = httpx.AsyncClient(
-        timeout=settings.fetch_timeout_seconds,
-        follow_redirects=True,
-        headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.9",
-        },
-    )
+    """Manage shared HTTP client and MCP session manager lifecycle."""
+    app.state.http = get_http_client()
     try:
-        yield
+        async with mcp_server.session_manager.run():
+            yield
     finally:
-        await app.state.http.aclose()
+        await close_http_client()
 
 
 app = FastAPI(
@@ -107,3 +101,8 @@ app.include_router(transcribe_router, prefix="/v1")
 app.include_router(summarize_router, prefix="/v1")
 app.include_router(extract_router, prefix="/v1")
 app.include_router(skills_router, prefix="/v1")
+
+
+# ── MCP server (Streamable HTTP at /mcp/) ────────────────────────────────────
+
+app.mount("/mcp", mcp_server.streamable_http_app())

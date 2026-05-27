@@ -109,6 +109,7 @@ class BrowserPool:
         ctx = await self._browser.new_context(
             locale=DEFAULT_LOCALE,
             timezone_id=DEFAULT_TZ,
+            ignore_https_errors=True,
         )
         try:
             page = await ctx.new_page()

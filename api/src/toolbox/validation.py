@@ -14,39 +14,40 @@ BLOCKED_HOSTS = {
 }
 
 
-async def validate_url(url: str) -> None:
-    """Reject URLs that could cause SSRF or are obviously invalid.
+class URLValidationError(Exception):
+    """Raised when a URL fails validation."""
 
-    Blocks: file://, ftp://, non-HTTP schemes, loopback (127.x, ::1),
-    link-local (169.254.x), unspecified (0.0.0.0), IPv4-mapped IPv6
-    loopback (::ffff:127.0.0.1), and cloud metadata endpoints.
-    LAN private ranges (192.168.x, 10.x) are allowed since this
-    is a LAN-only service and agents may need to fetch from local hosts.
-    """
+    def __init__(self, detail: str):
+        self.detail = detail
+        super().__init__(detail)
+
+
+def _check_url(url: str) -> str:
+    """Parse and validate URL structure. Returns hostname on success."""
     try:
         parsed = urlparse(url)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid URL.")
+        raise URLValidationError("Invalid URL.")
 
     if not parsed.scheme or not parsed.hostname:
-        raise HTTPException(status_code=400, detail="Invalid URL: missing scheme or host.")
+        raise URLValidationError("Invalid URL: missing scheme or host.")
 
     if parsed.scheme not in ALLOWED_SCHEMES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"URL scheme '{parsed.scheme}' is not allowed. Use http or https.",
-        )
+        raise URLValidationError(f"URL scheme '{parsed.scheme}' is not allowed. Use http or https.")
 
     hostname = parsed.hostname.lower()
 
     if hostname in BLOCKED_HOSTS:
-        raise HTTPException(status_code=400, detail="Access to this host is not allowed.")
+        raise URLValidationError("Access to this host is not allowed.")
 
-    # Resolve hostname and check for dangerous IPs
+    return hostname
+
+
+async def _check_ip(hostname: str) -> None:
+    """Resolve hostname and reject dangerous IPs."""
     try:
         addr = ipaddress.ip_address(hostname)
     except ValueError:
-        # It's a hostname — resolve via DNS in a thread to avoid blocking the event loop
         loop = asyncio.get_event_loop()
         try:
             resolved = await loop.run_in_executor(
@@ -60,16 +61,29 @@ async def validate_url(url: str) -> None:
             return
 
     if addr.is_loopback or addr.is_link_local or addr.is_unspecified:
-        raise HTTPException(
-            status_code=400,
-            detail="Access to loopback/link-local addresses is not allowed.",
-        )
+        raise URLValidationError("Access to loopback/link-local addresses is not allowed.")
 
-    # IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1) — check the inner IPv4
     if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
         mapped = addr.ipv4_mapped
         if mapped.is_loopback or mapped.is_link_local or mapped.is_unspecified:
-            raise HTTPException(
-                status_code=400,
-                detail="Access to loopback/link-local addresses is not allowed.",
-            )
+            raise URLValidationError("Access to loopback/link-local addresses is not allowed.")
+
+
+async def validate_url_raw(url: str) -> None:
+    """Validate a URL, raising URLValidationError on failure.
+
+    Use this from non-HTTP contexts (MCP handlers).
+    """
+    hostname = _check_url(url)
+    await _check_ip(hostname)
+
+
+async def validate_url(url: str) -> None:
+    """Validate a URL, raising HTTPException on failure.
+
+    Use this from FastAPI REST handlers.
+    """
+    try:
+        await validate_url_raw(url)
+    except URLValidationError as e:
+        raise HTTPException(status_code=400, detail=e.detail)
