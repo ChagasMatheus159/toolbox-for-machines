@@ -8,10 +8,14 @@ Requirements:
 
 Run:
     pytest tests/ -v
-    pytest tests/ -v -k "not llm"  # skip LLM-dependent tests
+    pytest tests/ -v --run-llm          # include LLM-dependent tests
+    pytest tests/ -v --run-llm -p no:timeout  # if LLM is rate-limited
 
 Tests are grouped by endpoint. LLM-dependent tests (describe, summarize, extract)
 are marked with @pytest.mark.llm and can be skipped if no LLM is configured.
+
+Note: If your LLM endpoint has rate limits (e.g. NVIDIA NIM free tier = 40 RPM),
+LLM tests may be slow due to queuing. They work correctly but take time.
 """
 
 import base64
@@ -33,7 +37,7 @@ def client():
 @pytest.fixture(scope="session")
 def async_client():
     """Async HTTP client for concurrent tests."""
-    return httpx.AsyncClient(base_url=BASE_URL, timeout=60)
+    return httpx.AsyncClient(base_url=BASE_URL, timeout=120)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -228,7 +232,7 @@ class TestDescribe:
         r = client.post("/v1/describe", json={
             "page_url": "https://example.com",
             "prompt": "What is shown on this page?",
-        }, timeout=60)
+        }, timeout=120)
         assert r.status_code == 200
         data = r.json()
         assert len(data["description"]) > 10
@@ -237,7 +241,7 @@ class TestDescribe:
         r = client.post("/v1/describe", json={
             "image_url": "https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png",
             "prompt": "What logo is this?",
-        }, timeout=60)
+        }, timeout=120)
         assert r.status_code == 200
         assert len(r.json()["description"]) > 10
 
@@ -247,7 +251,7 @@ class TestDescribe:
         r = client.post("/v1/describe", json={
             "image_b64": red_pixel,
             "prompt": "What color is this pixel?",
-        }, timeout=60)
+        }, timeout=120)
         assert r.status_code == 200
         assert len(r.json()["description"]) > 5
 
@@ -316,7 +320,7 @@ class TestSummarize:
             "text": long_text,
             "max_tokens": 50,
             "style": "brief",
-        }, timeout=60)
+        }, timeout=120)
         assert r.status_code == 200
         data = r.json()
         assert len(data["summary"]) > 10
@@ -328,7 +332,7 @@ class TestSummarize:
             "text": text,
             "style": "bullets",
             "max_tokens": 100,
-        }, timeout=60)
+        }, timeout=120)
         assert r.status_code == 200
 
     def test_summarize_empty_rejected(self, client):
@@ -345,7 +349,7 @@ class TestSummarize:
         r = client.post("/v1/summarize", json={
             "text": huge_text,
             "max_tokens": 50,
-        }, timeout=60)
+        }, timeout=120)
         assert r.status_code == 200
 
 
@@ -370,7 +374,7 @@ class TestExtract:
             },
             "required": ["name", "age", "city"],
         }
-        r = client.post("/v1/extract", json={"text": text, "schema": schema}, timeout=60)
+        r = client.post("/v1/extract", json={"text": text, "schema": schema}, timeout=120)
         assert r.status_code == 200
         data = r.json()["data"]
         assert data["name"] == "John Smith"
@@ -389,7 +393,7 @@ class TestExtract:
                 },
             },
         }
-        r = client.post("/v1/extract", json={"text": text, "schema": schema}, timeout=60)
+        r = client.post("/v1/extract", json={"text": text, "schema": schema}, timeout=120)
         assert r.status_code == 200
         data = r.json()["data"]
         assert isinstance(data, list)
@@ -413,7 +417,7 @@ class TestExtract:
                 "wind_speed": {"type": "number"},
             },
         }
-        r = client.post("/v1/extract", json={"text": text, "schema": schema}, timeout=60)
+        r = client.post("/v1/extract", json={"text": text, "schema": schema}, timeout=120)
         assert r.status_code == 200
         data = r.json()["data"]
         assert data["temperature"] == 72
