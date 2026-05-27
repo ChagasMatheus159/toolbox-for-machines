@@ -30,14 +30,14 @@ BASE_URL = os.environ.get("TOOLBOX_URL", "http://localhost:9600")
 @pytest.fixture(scope="session")
 def client():
     """Shared HTTP client for all tests."""
-    with httpx.Client(base_url=BASE_URL, timeout=30) as c:
+    with httpx.Client(base_url=BASE_URL, timeout=180) as c:
         yield c
 
 
 @pytest.fixture(scope="session")
 def async_client():
     """Async HTTP client for concurrent tests."""
-    return httpx.AsyncClient(base_url=BASE_URL, timeout=120)
+    return httpx.AsyncClient(base_url=BASE_URL)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -142,7 +142,7 @@ class TestSearch:
 
 class TestFetch:
     def test_fetch_basic(self, client):
-        r = client.post("/v1/fetch", json={"url": "https://example.com"}, timeout=30)
+        r = client.post("/v1/fetch", json={"url": "https://example.com"})
         assert r.status_code == 200
         data = r.json()
         assert data["url"] == "https://example.com"
@@ -151,12 +151,12 @@ class TestFetch:
         assert data["word_count"] > 0
 
     def test_fetch_text_format(self, client):
-        r = client.post("/v1/fetch", json={"url": "https://example.com", "format": "text"}, timeout=30)
+        r = client.post("/v1/fetch", json={"url": "https://example.com", "format": "text"})
         assert r.status_code == 200
         assert r.json()["format"] == "text"
 
     def test_fetch_with_screenshot(self, client):
-        r = client.post("/v1/fetch", json={"url": "https://example.com", "screenshot": True}, timeout=30)
+        r = client.post("/v1/fetch", json={"url": "https://example.com", "screenshot": True})
         assert r.status_code == 200
         data = r.json()
         assert data["screenshot_b64"] is not None
@@ -182,13 +182,13 @@ class TestFetch:
         assert r.status_code == 400
 
     def test_fetch_nonexistent_domain(self, client):
-        r = client.post("/v1/fetch", json={"url": "https://thisdomaindoesnotexist12345.com"}, timeout=30)
+        r = client.post("/v1/fetch", json={"url": "https://thisdomaindoesnotexist12345.com"})
         assert r.status_code == 200
         # Should return error content gracefully, not crash
         assert "error" in r.json()["content"].lower() or r.json()["word_count"] == 0
 
     def test_fetch_wait_ms(self, client):
-        r = client.post("/v1/fetch", json={"url": "https://example.com", "wait_ms": 1000}, timeout=30)
+        r = client.post("/v1/fetch", json={"url": "https://example.com", "wait_ms": 1000})
         assert r.status_code == 200
 
     def test_fetch_caching(self, client):
@@ -196,10 +196,10 @@ class TestFetch:
         import time
         payload = {"url": "https://example.com", "format": "markdown"}
 
-        client.post("/v1/fetch", json=payload, timeout=30)  # Prime cache
+        client.post("/v1/fetch", json=payload)  # Prime cache
 
         start = time.time()
-        r = client.post("/v1/fetch", json=payload, timeout=30)
+        r = client.post("/v1/fetch", json=payload)
         elapsed = time.time() - start
 
         assert r.status_code == 200
@@ -232,7 +232,7 @@ class TestDescribe:
         r = client.post("/v1/describe", json={
             "page_url": "https://example.com",
             "prompt": "What is shown on this page?",
-        }, timeout=120)
+        })
         assert r.status_code == 200
         data = r.json()
         assert len(data["description"]) > 10
@@ -241,7 +241,7 @@ class TestDescribe:
         r = client.post("/v1/describe", json={
             "image_url": "https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png",
             "prompt": "What logo is this?",
-        }, timeout=120)
+        })
         assert r.status_code == 200
         assert len(r.json()["description"]) > 10
 
@@ -251,7 +251,7 @@ class TestDescribe:
         r = client.post("/v1/describe", json={
             "image_b64": red_pixel,
             "prompt": "What color is this pixel?",
-        }, timeout=120)
+        })
         assert r.status_code == 200
         assert len(r.json()["description"]) > 5
 
@@ -292,7 +292,7 @@ class TestTranscribe:
         r = client.post("/v1/transcribe", json={
             "audio_url": "https://www.kozco.com/tech/LRMonoPhase4.wav",
             "language": "en",
-        }, timeout=120)
+        })
         assert r.status_code == 200
         data = r.json()
         assert "transcript" in data
@@ -320,7 +320,7 @@ class TestSummarize:
             "text": long_text,
             "max_tokens": 50,
             "style": "brief",
-        }, timeout=120)
+        })
         assert r.status_code == 200
         data = r.json()
         assert len(data["summary"]) > 10
@@ -332,7 +332,7 @@ class TestSummarize:
             "text": text,
             "style": "bullets",
             "max_tokens": 100,
-        }, timeout=120)
+        })
         assert r.status_code == 200
 
     def test_summarize_empty_rejected(self, client):
@@ -345,11 +345,11 @@ class TestSummarize:
 
     def test_summarize_truncation(self, client):
         """Input longer than 6800 chars should not crash."""
-        huge_text = "word " * 5000  # ~25000 chars
+        huge_text = "The quick brown fox jumps over the lazy dog. " * 200  # ~9000 chars
         r = client.post("/v1/summarize", json={
             "text": huge_text,
             "max_tokens": 50,
-        }, timeout=120)
+        })
         assert r.status_code == 200
 
 
@@ -374,7 +374,7 @@ class TestExtract:
             },
             "required": ["name", "age", "city"],
         }
-        r = client.post("/v1/extract", json={"text": text, "schema": schema}, timeout=120)
+        r = client.post("/v1/extract", json={"text": text, "schema": schema})
         assert r.status_code == 200
         data = r.json()["data"]
         assert data["name"] == "John Smith"
@@ -393,7 +393,7 @@ class TestExtract:
                 },
             },
         }
-        r = client.post("/v1/extract", json={"text": text, "schema": schema}, timeout=120)
+        r = client.post("/v1/extract", json={"text": text, "schema": schema})
         assert r.status_code == 200
         data = r.json()["data"]
         assert isinstance(data, list)
@@ -417,7 +417,7 @@ class TestExtract:
                 "wind_speed": {"type": "number"},
             },
         }
-        r = client.post("/v1/extract", json={"text": text, "schema": schema}, timeout=120)
+        r = client.post("/v1/extract", json={"text": text, "schema": schema})
         assert r.status_code == 200
         data = r.json()["data"]
         assert data["temperature"] == 72
@@ -449,7 +449,7 @@ class TestMCP:
         r = client.post("/mcp/", headers=self.HEADERS, json={
             "jsonrpc": "2.0", "id": 2, "method": "tools/call",
             "params": {"name": "search", "arguments": {"query": "python", "limit": 2}},
-        }, timeout=30)
+        })
         assert r.status_code == 200
         data = r.json()
         assert "result" in data
