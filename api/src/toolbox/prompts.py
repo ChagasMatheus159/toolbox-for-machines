@@ -1,7 +1,7 @@
 """System prompts for LLM-backed tools.
 
 Each prompt is rigid and enforces exact output format.
-Keep prompts SHORT — we have a 2048 token context limit.
+Keep prompts SHORT — inputs are truncated to fit small context windows.
 """
 
 DESCRIBE = (

@@ -14,7 +14,7 @@ from toolbox.mcp_server import mcp as mcp_server
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage shared HTTP client and MCP session manager lifecycle."""
-    app.state.http = get_http_client()
+    get_http_client()  # Ensure client is initialized
     try:
         async with mcp_server.session_manager.run():
             yield
@@ -43,7 +43,7 @@ app.add_middleware(
 @app.get("/healthz")
 async def healthz():
     """Liveness check for the API itself."""
-    http = app.state.http
+    http = get_http_client()
 
     async def check_searxng():
         try:

@@ -16,6 +16,7 @@ from toolbox.config import settings
 from toolbox.http_client import get_http_client
 from toolbox.llm import chat
 from toolbox.prompts import DESCRIBE, SUMMARIZE, EXTRACT
+from toolbox.validation import validate_url_raw, URLValidationError
 
 log = logging.getLogger("toolbox.services")
 
@@ -123,8 +124,6 @@ async def fetch(
         raise ToolboxError("format must be 'markdown' or 'text'")
     wait_ms = max(0, min(20000, wait_ms))
 
-    from toolbox.validation import validate_url_raw, URLValidationError
-
     try:
         await validate_url_raw(url)
     except URLValidationError as e:
@@ -206,8 +205,6 @@ async def describe(
     """Describe an image or webpage screenshot using a vision model."""
     if not image_url and not image_b64 and not page_url:
         raise ToolboxError("One of image_url, image_b64, or page_url is required.")
-
-    from toolbox.validation import validate_url_raw, URLValidationError
 
     async def _validate(url: str) -> None:
         try:
@@ -309,8 +306,6 @@ async def transcribe(
     """Transcribe audio to text using whisper.cpp."""
     if not audio_url and not audio_b64:
         raise ToolboxError("Either audio_url or audio_b64 is required.")
-
-    from toolbox.validation import validate_url_raw, URLValidationError
 
     http = get_http_client()
     MAX_AUDIO_BYTES = 100 * 1024 * 1024
