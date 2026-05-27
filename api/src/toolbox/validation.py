@@ -48,7 +48,7 @@ async def _check_ip(hostname: str) -> None:
     try:
         addr = ipaddress.ip_address(hostname)
     except ValueError:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             resolved = await loop.run_in_executor(
                 None, socket.getaddrinfo, hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM

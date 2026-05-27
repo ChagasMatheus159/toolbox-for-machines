@@ -129,7 +129,7 @@ SKILLS = {
         {
             "id": "extract",
             "endpoint": "POST /v1/extract",
-            "description": "Extract structured JSON data from text using a provided schema. LLM enforces the schema via grammar constraints.",
+            "description": "Extract structured JSON data from text using a provided schema. Output is constrained to valid JSON via response format.",
             "input_schema": {
                 "type": "object",
                 "properties": {

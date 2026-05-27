@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     whisper_url: str = "http://whisper:8200"
 
     # LLM
-    llm_url: str = "http://192.168.3.118:8080/v1"
+    llm_url: str = "http://localhost:8080/v1"
     llm_api_key: str = ""
     llm_model: str = "qwen3-vl-8b"
     llm_max_concurrent: int = 1

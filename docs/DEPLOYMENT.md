@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Docker Engine 24+ with Compose V2
-- Network access to the GPU host (192.168.3.118:8080) running Qwen3-VL-8B
+- Network access to an OpenAI-compatible LLM endpoint (for describe/summarize/extract)
 - At least 4GB free RAM for containers (SearXNG + Camoufox + Whisper + API)
 
 ## Quick Start
@@ -11,7 +11,7 @@
 ```bash
 cd toolbox
 cp .env.example .env
-# Edit .env if your LLM host is different from 192.168.3.118
+# Edit .env — point LLM_URL to your OpenAI-compatible vision model
 docker compose up -d
 ```
 
@@ -36,9 +36,9 @@ SEARXNG_URL=http://searxng:8080
 CAMOUFOX_URL=http://camoufox:8790
 WHISPER_URL=http://whisper:8200
 
-# LLM host (your GPU machine on LAN)
-LLM_URL=http://192.168.3.118:8080/v1
-LLM_API_KEY=dontfuckup!
+# LLM endpoint (any OpenAI-compatible API with vision support)
+LLM_URL=http://host.docker.internal:8080/v1
+LLM_API_KEY=your-api-key
 LLM_MODEL=qwen3-vl-8b
 LLM_MAX_CONCURRENT=1        # Serialize LLM requests (limited VRAM)
 LLM_TIMEOUT_SECONDS=60
@@ -66,7 +66,7 @@ CACHE_DB_PATH=/data/cache.db
                     │   │ /v1/fetch            │──┼──► toolbox-camoufox (internal)
                     │   │ /v1/transcribe       │──┼──► toolbox-whisper (internal)
                     │   │ /v1/describe         │──┼──┐
-                    │   │ /v1/summarize        │──┼──┼──► Qwen3-VL-8B (LAN :8080)
+                    │   │ /v1/summarize        │──┼──┼──► Vision LLM (external)
                     │   │ /v1/extract          │──┼──┘
                     │   └──────────────────────┘  │
                     └─────────────────────────────┘
@@ -83,16 +83,16 @@ Only port **9600** is exposed. All backend services are on an internal Docker ne
 | toolbox-camoufox | toolbox-camoufox (custom) | Stealth headless Firefox | ~1.5GB RAM (limited) |
 | toolbox-whisper | toolbox-whisper (custom) | Audio transcription (CPU) | ~2GB RAM |
 
-Total RAM: ~4GB. No GPU required on this host.
+Total RAM: ~4GB. No GPU required on the toolbox host.
 
-## GPU Host (Separate Machine)
+## LLM (Separate)
 
-The LLM runs on a separate machine with an AMD RX 6600 (8GB VRAM):
+The LLM is **not** part of the Docker stack — it runs wherever you choose (local GPU, cloud API, remote server). See [SETUP_LLM_HOST.md](../SETUP_LLM_HOST.md) for setup options:
 
-- **Model:** Qwen3-VL-8B-Instruct Q4_K_M
-- **Server:** llama.cpp with `--ctx-size 2048 --parallel 1`
-- **Port:** 8080 (OpenAI-compatible API)
-- **Setup guide:** [SETUP_LLM_HOST.md](../SETUP_LLM_HOST.md)
+- **llama.cpp** — self-hosted with GPU (recommended: Qwen3-VL-8B)
+- **Ollama** — easy local setup
+- **OpenAI/cloud** — no GPU needed, pay-per-token
+- **Any OpenAI-compatible provider** — vLLM, Together AI, Groq, etc.
 
 ## Updating
 
@@ -127,12 +127,13 @@ docker compose logs -f camoufox
 - Restart: `docker compose restart camoufox`
 
 ### LLM shows "unreachable"
-- Verify GPU host: `curl http://192.168.3.118:8080/v1/models`
-- Check firewall: port 8080 must be open between hosts
+- Verify your LLM endpoint: `curl $LLM_URL/models`
+- Check firewall: LLM port must be accessible from the Docker host
 - Check `LLM_URL` and `LLM_API_KEY` in `.env`
+- If LLM is on the same machine, use `host.docker.internal` not `localhost`
 
 ### Whisper shows "unhealthy"  
-- The medium model takes ~20s to load on startup
+- The model takes ~20s to load on startup
 - Verify: `docker compose exec whisper python3 -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8200/').status)"`
 
 ### Cache issues

@@ -4,7 +4,6 @@ import base64
 import hashlib
 import json
 import logging
-import re
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP

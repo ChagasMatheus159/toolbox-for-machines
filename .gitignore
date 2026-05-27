@@ -42,3 +42,13 @@ docker-compose.override.yml
 *.gguf
 *.bin
 models/
+
+# Internal dev docs (not published)
+SPEC.md
+PLAN.md
+MCP_SPEC.md
+MCP_PLAN.md
+CHANGELOG.md
+AGENT_HANDOFF.md
+SWEEP_PROMPT.md
+SWEEP2_PROMPT.md
