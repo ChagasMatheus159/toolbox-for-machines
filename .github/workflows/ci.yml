@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install ruff
+      - run: ruff check api/src/
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build containers
+        run: docker compose build
+
+      - name: Start stack (no LLM)
+        run: |
+          docker compose up -d
+          echo "Waiting for services to be healthy..."
+          for i in $(seq 1 60); do
+            STATUS=$(curl -sf http://localhost:9600/healthz 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['status'])" 2>/dev/null || echo 'waiting')
+            if [ "$STATUS" = "ok" ] || [ "$STATUS" = "degraded" ]; then
+              echo "Services ready (status: $STATUS)"
+              break
+            fi
+            sleep 2
+          done
+          curl -s http://localhost:9600/healthz | python3 -m json.tool
+
+      - name: Run tests (skip LLM-dependent)
+        run: |
+          pip install pytest httpx
+          pytest tests/ -v --tb=short
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs --tail 50

@@ -1,0 +1,61 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/toolbox
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./api
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-api:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}-api:latest
+
+      - name: Build and push Camoufox image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./camoufox
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-camoufox:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}-camoufox:latest
+
+      - name: Build and push Whisper image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./whisper
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}-whisper:${{ steps.version.outputs.version }}
+            ${{ env.IMAGE_PREFIX }}-whisper:latest
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
