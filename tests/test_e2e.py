@@ -29,8 +29,12 @@ BASE_URL = os.environ.get("TOOLBOX_URL", "http://localhost:9600")
 
 @pytest.fixture(scope="session")
 def client():
-    """Shared HTTP client for all tests."""
-    with httpx.Client(base_url=BASE_URL, timeout=180) as c:
+    """Shared HTTP client for all tests.
+    
+    Timeout is high to accommodate LLM semaphore queuing + rate limit retries.
+    With 40 RPM rate limits, 15 sequential LLM tests can take 5+ minutes.
+    """
+    with httpx.Client(base_url=BASE_URL, timeout=300) as c:
         yield c
 
 

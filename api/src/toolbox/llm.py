@@ -1,10 +1,10 @@
-"""LLM client with concurrency control for the Toolbox."""
+"""LLM client with concurrency control and retry for the Toolbox."""
 
 import asyncio
 import logging
 from typing import Any
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError, APIStatusError, APITimeoutError
 
 from toolbox.config import settings
 
@@ -15,6 +15,10 @@ _semaphore = asyncio.Semaphore(settings.llm_max_concurrent)
 
 # Shared async OpenAI client
 _client: AsyncOpenAI | None = None
+
+# Retry config
+MAX_RETRIES = 2
+RETRY_BACKOFF = [2, 4]  # seconds between retries
 
 
 def get_client() -> AsyncOpenAI:
@@ -37,6 +41,9 @@ async def chat(
 ) -> str:
     """Send a chat completion request to the LLM with concurrency control.
 
+    Retries on 429 (rate limit) and 5xx errors with exponential backoff.
+    Fails immediately on timeouts and 4xx (except 429).
+
     Args:
         messages: OpenAI-format messages list.
         max_tokens: Max output tokens (defaults to settings.llm_max_tokens).
@@ -47,7 +54,7 @@ async def chat(
         The assistant's response text.
 
     Raises:
-        Exception: On timeout, OOM, or other LLM errors.
+        Exception: On timeout, client errors, or exhausted retries.
     """
     client = get_client()
     max_tokens = max_tokens or settings.llm_max_tokens
@@ -63,11 +70,46 @@ async def chat(
         if response_format:
             kwargs["response_format"] = response_format
 
-        try:
-            response = await client.chat.completions.create(**kwargs)
-            content = response.choices[0].message.content or ""
-            log.debug("LLM response: %d chars", len(content))
-            return content.strip()
-        except Exception as e:
-            log.error("LLM request failed: %s", e)
-            raise
+        last_error: Exception | None = None
+        for attempt in range(MAX_RETRIES + 1):
+            try:
+                response = await client.chat.completions.create(**kwargs)
+                content = response.choices[0].message.content or ""
+                log.debug("LLM response: %d chars", len(content))
+                return content.strip()
+            except APITimeoutError:
+                # Timeout — fail immediately, no point retrying
+                log.error("LLM request timed out (attempt %d)", attempt + 1)
+                raise
+            except RateLimitError as e:
+                # 429 — retry with backoff
+                last_error = e
+                if attempt < MAX_RETRIES:
+                    wait = RETRY_BACKOFF[attempt]
+                    log.warning("LLM rate limited (429), retrying in %ds (attempt %d/%d)", wait, attempt + 1, MAX_RETRIES + 1)
+                    await asyncio.sleep(wait)
+                else:
+                    log.error("LLM rate limited, retries exhausted")
+                    raise
+            except APIStatusError as e:
+                # 5xx — retry; 4xx (except 429) — fail immediately
+                if e.status_code >= 500:
+                    last_error = e
+                    if attempt < MAX_RETRIES:
+                        wait = RETRY_BACKOFF[attempt]
+                        log.warning("LLM server error (%d), retrying in %ds (attempt %d/%d)", e.status_code, wait, attempt + 1, MAX_RETRIES + 1)
+                        await asyncio.sleep(wait)
+                    else:
+                        log.error("LLM server error (%d), retries exhausted", e.status_code)
+                        raise
+                else:
+                    # 4xx client error — fail immediately
+                    log.error("LLM client error (%d): %s", e.status_code, e)
+                    raise
+            except Exception as e:
+                # Unknown error — fail immediately
+                log.error("LLM request failed: %s", e)
+                raise
+
+        # Should not reach here, but just in case
+        raise last_error or RuntimeError("LLM request failed")
