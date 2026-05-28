@@ -52,3 +52,6 @@ CHANGELOG.md
 AGENT_HANDOFF.md
 SWEEP_PROMPT.md
 SWEEP2_PROMPT.md
+
+# Gitea CI (private, not for GitHub)
+.gitea/
