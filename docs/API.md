@@ -95,7 +95,7 @@ curl -X POST http://localhost:9600/v1/fetch \
 
 ### `POST /v1/describe`
 
-Describe an image using the vision model (Qwen3-VL-8B).
+Describe an image using the vision model.
 
 **Request Body:**
 
@@ -166,7 +166,7 @@ curl -X POST http://localhost:9600/v1/transcribe \
 
 ### `POST /v1/summarize`
 
-Summarize text using the LLM (Qwen3-VL-8B).
+Summarize text using the LLM.
 
 **Request Body:**
 

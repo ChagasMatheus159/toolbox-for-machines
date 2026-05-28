@@ -38,11 +38,11 @@ Toolbox is a **dumb-muscle tool service** for AI agents. It does not think, plan
 │  └─────────┘   └─────────┘   └─────────┘          │            │
 └────────────────────────────────────────────────────┼────────────┘
                                                      │ LAN
-                                              ┌──────┴──────┐
-                                              │ llama.cpp   │
-                                              │ Qwen3-VL-8B │
-                                              │ :8080 (GPU) │
-                                              └─────────────┘
+                                               ┌──────┴──────┐
+                                               │  Vision LLM │
+                                               │ (external)  │
+                                               │    :8080    │
+                                               └─────────────┘
 ```
 
 ## Request Flow
@@ -74,7 +74,7 @@ Agent → HTTP POST → FastAPI Router → Check Cache
 | **SearXNG** | Meta-search across Google, Bing, DuckDuckGo, etc. | Privacy-respecting, self-hosted, JSON API |
 | **Camoufox** | Stealth headless Firefox with anti-detection | Bypasses bot protection, renders JS pages |
 | **whisper.cpp** | Audio transcription (CPU, medium model) | Purpose-built speech-to-text, no GPU needed |
-| **Qwen3-VL-8B** | Vision, summarization, structured extraction | Best multimodal model that fits 8GB VRAM |
+| **Vision LLM** | Vision, summarization, structured extraction | Any OpenAI-compatible endpoint (Qwen3-VL recommended for self-hosted) |
 
 ## LLM Integration
 
@@ -93,7 +93,7 @@ Authorization: Bearer {LLM_API_KEY}
 
 ### Concurrency Control
 
-Only one LLM request runs at a time (asyncio Semaphore). This prevents VRAM OOM errors on the 8GB GPU. Non-LLM endpoints (search, fetch, transcribe) run fully parallel.
+Only one LLM request runs at a time (asyncio Semaphore). This prevents overloading the LLM backend and avoids rate limit errors. Non-LLM endpoints (search, fetch, transcribe) run fully parallel.
 
 ### System Prompts
 
@@ -102,9 +102,9 @@ Each LLM endpoint uses a rigid system prompt stored in `prompts.py`:
 - **summarize**: Condense to N tokens. No preamble.
 - **extract**: Output ONLY valid JSON matching the schema. No explanation.
 
-### Context Limit
+### Context Usage
 
-The LLM runs with `-c 2048`. Each toolbox request uses ~1500-2500 tokens:
+Toolbox truncates inputs to keep requests small. Each request uses ~1500-2500 tokens:
 - System prompt: ~150 tokens
 - Input content: ~500-1500 tokens (truncated by the API if larger)
 - Output: ~200-500 tokens
