@@ -15,10 +15,10 @@ jobs:
       contents: write
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -29,7 +29,7 @@ jobs:
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Build and push API image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./api
           push: true
@@ -38,7 +38,7 @@ jobs:
             ${{ env.IMAGE_PREFIX }}-api:latest
 
       - name: Build and push Camoufox image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./camoufox
           push: true
@@ -47,7 +47,7 @@ jobs:
             ${{ env.IMAGE_PREFIX }}-camoufox:latest
 
       - name: Build and push Whisper image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: ./whisper
           push: true
@@ -56,6 +56,6 @@ jobs:
             ${{ env.IMAGE_PREFIX }}-whisper:latest
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
